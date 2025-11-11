@@ -48,9 +48,11 @@ func main() {
 	output := ""
 	burst := 100
 	qps := 25
+	var groups []string
 	pflag.StringVarP(&output, "output", "o", output, "Output format. May be '' or 'json'.")
 	pflag.IntVar(&burst, "burst", burst, "API requests allowed per second (burst).")
 	pflag.IntVar(&qps, "qps", qps, "API requests allowed per second (steady state). Set to -1 to disable rate limiter.")
+	pflag.StringSliceVarP(&groups, "groups", "g", nil, "list of API groups")
 
 	// set up logging
 	klog.InitFlags(nil)
@@ -104,6 +106,8 @@ func main() {
 		Output:          output,
 		Stderr:          os.Stderr,
 		Stdout:          os.Stdout,
+		Namespace:       *configFlags.Namespace,
+		Groups:          groups,
 	}
 	checkErr(opts.Validate())
 	checkErr(opts.Run())

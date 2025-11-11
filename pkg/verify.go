@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -46,6 +47,8 @@ type VerifyGCOptions struct {
 	Output          string
 	Stderr          io.Writer
 	Stdout          io.Writer
+	Namespace       string
+	Groups          []string
 }
 
 // Validate ensures the specified options are valid
@@ -106,6 +109,20 @@ func (v *VerifyGCOptions) Run() error {
 		return err
 	}
 	gcResources := discovery.FilteredBy(discovery.SupportsAllVerbs{Verbs: []string{"list", "get", "delete"}}, preferredResources)
+	if len(v.Groups) > 0 {
+		gcResources = discovery.FilteredBy(discovery.ResourcePredicateFunc(func(groupVersion string, r *metav1.APIResource) bool {
+			for _, g := range v.Groups {
+				match, _ := filepath.Match(g, groupVersion)
+				if match {
+					return true
+				}
+			}
+			if klog.V(2).Enabled() {
+				fmt.Fprintf(v.Stderr, "skipping: %s\n", groupVersion)
+			}
+			return false
+		}), gcResources)
+	}
 	gvrMap, err := discovery.GroupVersionResources(gcResources)
 	if err != nil {
 		return err
@@ -138,7 +155,7 @@ func (v *VerifyGCOptions) Run() error {
 			fmt.Fprintf(v.Stderr, "fetching %v, %v\n", gvr.GroupVersion().String(), gvr.Resource)
 		}
 		pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			list, err := v.MetadataClient.Resource(gvr).List(ctx, opts)
+			list, err := v.MetadataClient.Resource(gvr).Namespace(v.Namespace).List(ctx, opts)
 			if err != nil {
 				warningCount++
 				fmt.Fprintf(v.Stderr, "warning: could not list %v: %v\n", gvr, err.Error())
